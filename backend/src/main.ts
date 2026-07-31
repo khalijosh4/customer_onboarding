@@ -6,6 +6,14 @@ import { join } from 'path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection (non-fatal):', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception (non-fatal):', err.message);
+});
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['log', 'error', 'warn', 'debug'],
@@ -16,32 +24,22 @@ async function bootstrap() {
   const nodeEnv = config.get<string>('NODE_ENV', 'development');
   const isDev = nodeEnv !== 'production';
 
-  // In development make CORS permissive to avoid local origin/port issues.
-  // In production, keep a strict allowlist.
-  if (isDev) {
-    app.enableCors({ origin: true, methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'], credentials: true });
-  } else {
-    const allowedOrigins = [
-      config.get<string>('FRONTEND_URL', 'http://localhost:5175'),
-      config.get<string>('ADMIN_FRONTEND_URL', 'http://localhost:5175'),
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:5175',
-    ];
+  const corsOrigins = isDev
+    ? true
+    : [
+        config.get<string>('FRONTEND_URL', 'http://localhost:5175'),
+        config.get<string>('ADMIN_FRONTEND_URL', 'http://localhost:5175'),
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5175',
+      ].filter(Boolean) as string[];
 
-    app.enableCors({
-      origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          callback(new Error(`Origin ${origin} not allowed by CORS`));
-        }
-      },
-      methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
-      credentials: true,
-    });
-  }
+  app.enableCors({
+    origin: corsOrigins,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+    credentials: true,
+  });
 
   app.setGlobalPrefix('api');
 

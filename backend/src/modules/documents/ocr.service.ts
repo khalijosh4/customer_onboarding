@@ -26,14 +26,15 @@ export class OcrService {
   constructor(private readonly config: ConfigService) {}
 
   async extractFromImage(filePath: string): Promise<OcrExtractedIdData> {
-    const languages = this.config.get<string>('OCR_LANGUAGES', 'eng');
+    const langStr = this.config.get<string>('OCR_LANGUAGES', 'eng');
+    const languages = langStr.split('+').filter(Boolean);
 
     // Where to find the Tesseract traineddata files (folder containing e.g. eng.traineddata)
     let tessdataDir = this.config.get<string>('OCR_TESSDATA_DIR', join(process.cwd(), 'tessdata'));
     if (!existsSync(tessdataDir)) {
       // Fallback: sometimes the traineddata was placed in the project root (e.g. eng.traineddata)
       const fallback = process.cwd();
-      if (existsSync(join(fallback, `${languages}.traineddata`))) {
+      if (existsSync(join(fallback, `${languages[0]}.traineddata`))) {
         tessdataDir = fallback;
         this.logger.warn(`Using fallback tessdata directory ${tessdataDir}`);
       } else {
@@ -41,19 +42,40 @@ export class OcrService {
       }
     }
 
-    // tesseract.js typings vary by version; await createWorker and cast options to any
-    // to keep compatibility with the installed release (v5.x).
-    const worker: any = await createWorker({ langPath: tessdataDir, cachePath: tessdataDir } as any);
+    const timeoutMs = Number(this.config.get<string>('OCR_TIMEOUT_MS', '90000')) || 90000;
 
+    let worker: any;
     try {
-      // Proper worker lifecycle: load core, load language files and initialize
-      await worker.load();
-      await worker.loadLanguage(languages);
-      await worker.initialize(languages);
+      // tesseract.js v5 signature: createWorker(langs, oem, options).
+      // Earlier code passed the options object as `langs`, which the worker-script
+      // misread and threw `langsArr.map is not a function`, leaving the worker
+      // promise pending forever. `cacheMethod: 'none'` forces a read straight from
+      // the local langPath every time, and `gzip: false` matches the un-gzipped
+      // eng.traineddata file. `errorHandler` prevents the worker from throwing an
+      // unhandled error out of the message handler (which would crash the process).
+      worker = await this.withTimeout(
+        createWorker(languages.join('+'), undefined, {
+          langPath: tessdataDir,
+          cacheMethod: 'none',
+          gzip: false,
+          errorHandler: (err: any) => this.logger.warn(`Tesseract worker error: ${err}`),
+        } as any),
+        timeoutMs,
+        'Tesseract worker startup timed out',
+      );
+      // Silence worker-level crashes so they don't bubble up unhandled.
+      if (worker?.worker) {
+        worker.worker.on('error', () => {});
+      }
 
+      // In v5 the worker comes pre-loaded/pre-initialized, so only recognize() is needed.
       const {
         data: { text },
-      } = await worker.recognize(filePath);
+      } = await this.withTimeout<{ data: { text: string } }>(
+        worker.recognize(filePath),
+        timeoutMs,
+        'Tesseract recognition timed out',
+      );
 
       return this.parseKenyanId(text);
     } catch (error: any) {
@@ -61,10 +83,22 @@ export class OcrService {
       return { rawText: '' };
     } finally {
       try {
-        await worker.terminate();
+        if (worker) await worker.terminate();
       } catch (e) {
         // ignore
       }
+    }
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -77,41 +111,127 @@ export class OcrService {
   private parseKenyanId(rawText: string): OcrExtractedIdData {
     const text = rawText.replace(/\r/g, '');
     const idNumberMatch = text.match(/\b\d{7,9}\b/);
-    const dateMatches = [...text.matchAll(/\b(\d{2}[./-]\d{2}[./-]\d{4})\b/g)].map((m) => m[1]);
+
+    // Dates can be printed as "22.12.2004", "22 / 12 / 2004", "18. 04. 2023",
+    // or "2004-12-22" (MRZ), so allow optional spaces and any separator.
+    const datePattern = /(\d{1,2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{2,4})/g;
+    const dates: { index: number; norm: string }[] = [];
+    let dm: RegExpExecArray | null;
+    while ((dm = datePattern.exec(text)) !== null) {
+      const year = dm[3].length === 2 ? `19${dm[3]}` : dm[3];
+      dates.push({
+        index: dm.index,
+        norm: `${dm[1].padStart(2, '0')}.${dm[2].padStart(2, '0')}.${year}`,
+      });
+    }
+
+    // Prefer dates printed next to their label (DATE OF BIRTH / DATE OF ISSUE),
+    // then fall back to reading order (first = DOB, second = issue, third = expiry).
+    const findDateNear = (labelRe: RegExp): string | undefined => {
+      for (const d of dates) {
+        const before = text.slice(Math.max(0, d.index - 80), d.index);
+        const after = text.slice(d.index, d.index + 40);
+        if (labelRe.test(before) || labelRe.test(after)) return d.norm;
+      }
+      return undefined;
+    };
+
+    const dateOfBirth = findDateNear(/DATE\s*OF\s*BIRTH|DOB|BIRTH|BORN/i) || dates[0]?.norm;
+    const dateOfIssue = findDateNear(/DATE\s*OF\s*ISSUE|ISSUE\s*DATE|ISSUE/i) || dates[1]?.norm;
+    const dateOfExpiry = findDateNear(/EXPIR|VALID\s*UNTIL|DATE\s*OF\s*EXPIRY/i) || dates[2]?.norm;
 
     // Names on Kenyan IDs typically appear in capital letters on their own lines.
+    // Exclude known label words (district/place/date/etc.) so the first real
+    // all-caps line — the holder's name — is picked instead of field labels.
+    const LABEL_WORDS =
+      /REPUBLIC|KENYA|IDENTITY|CARD|DISTRICT|BIRTH|PLACE|ISSUE|DATE|MALE|FEMALE|HOLDER|SIGN|SERIAL|NO\b|NAME|SEX|HEIGHT|NATIONAL|PASSPORT|ID\b/i;
     const nameLines = text
       .split('\n')
       .map((l) => l.trim())
-      .filter((l) => /^[A-Z\s]{4,}$/.test(l) && !/REPUBLIC|KENYA|IDENTITY|CARD/.test(l));
+      .map((l) => ({ raw: l, clean: l.replace(/[^A-Z\s]/g, '').replace(/\s+/g, ' ').trim() }))
+      .filter(({ raw, clean }) => {
+        if (!/^[A-Z]/.test(raw) || /\d/.test(raw)) return false;
+        if (clean.length < 4 || clean.split(' ').length < 2) return false;
+        if (LABEL_WORDS.test(clean)) return false;
+        return true;
+      })
+      .map(({ clean }) => clean);
 
     return {
       rawText: text,
       idNumber: idNumberMatch?.[0],
-      fullNameGuess: nameLines.slice(0, 3).join(' ').trim() || undefined,
-      dateOfBirth: dateMatches[0],
-      dateOfIssue: dateMatches[1],
-      dateOfExpiry: dateMatches[2],
+      fullNameGuess: nameLines[0] || undefined,
+      dateOfBirth,
+      dateOfIssue,
+      dateOfExpiry,
     };
   }
 
   /**
    * Compares OCR-extracted values against what the member typed in Step 3.
    * Uses forgiving/fuzzy comparisons since OCR text is noisy.
+   *
+   * Matching rules:
+   *  - ID number must match (digits-only, allowing OCR to miss/merge a digit).
+   *  - At least 2 of the other fields (first name, last name, DOB, issue date)
+   *    must also match — a single date mis-read by OCR won't fail the check.
    */
   matchesEnteredData(
     extracted: OcrExtractedIdData,
-    entered: { idNumber: string; firstName: string; lastName: string; dateOfBirth: string },
+    entered: {
+      idNumber: string;
+      firstName: string;
+      lastName: string;
+      dateOfBirth: string;
+      documentIssueDate?: string;
+    },
   ): boolean {
-    const idMatches =
-      !!extracted.idNumber && extracted.idNumber.replace(/\D/g, '') === entered.idNumber.replace(/\D/g, '');
+    const idMatches = this.idsMatch(extracted.idNumber, entered.idNumber);
 
     const nameHaystack = (extracted.fullNameGuess || extracted.rawText).toUpperCase();
-    const firstNameMatches = nameHaystack.includes(entered.firstName.toUpperCase());
-    const lastNameMatches = nameHaystack.includes(entered.lastName.toUpperCase());
+    const firstNameMatches = !!entered.firstName && nameHaystack.includes(entered.firstName.toUpperCase());
+    const lastNameMatches = !!entered.lastName && nameHaystack.includes(entered.lastName.toUpperCase());
+    const dobMatches = this.dobsMatch(extracted.dateOfBirth, entered.dateOfBirth);
+    const issueMatches = this.dobsMatch(extracted.dateOfIssue, entered.documentIssueDate || '');
 
-    // Require ID number match plus at least one name token match — OCR
-    // rarely nails full names perfectly, especially with glare/low quality.
-    return idMatches && (firstNameMatches || lastNameMatches);
+    const fieldMatches = [firstNameMatches, lastNameMatches, dobMatches, issueMatches].filter(Boolean).length;
+    return idMatches && fieldMatches >= 2;
+  }
+
+  private idsMatch(extracted?: string, entered?: string): boolean {
+    if (!extracted || !entered) return false;
+    const a = extracted.replace(/\D/g, '');
+    const b = entered.replace(/\D/g, '');
+    if (a === b) return true;
+    // OCR occasionally drops/merges a digit — accept when one is contained in the other.
+    if (a.length >= 6 && b.length >= 6) return a.includes(b) || b.includes(a);
+    return false;
+  }
+
+  private dobsMatch(extracted?: string, entered?: string): boolean {
+    if (!entered || !extracted) return false;
+    const o = this.normalizeDate(extracted);
+    const e = this.normalizeDate(entered);
+    if (!o || !e) return false;
+    if (o[0] === '00' || o[1] === '00') return false;
+    if (o[0] === e[0] && o[1] === e[1] && o[2] === e[2]) return true;
+    // Allow a 1-day drift caused by timezone conversion when date inputs are stored.
+    const oDays = Date.UTC(+o[2], +o[1] - 1, +o[0]);
+    const eDays = Date.UTC(+e[2], +e[1] - 1, +e[0]);
+    return Math.abs(oDays - eDays) <= 86400000;
+  }
+
+  private normalizeDate(value: string): string[] | null {
+    const v = value.trim();
+    // ISO / date-input format: YYYY-MM-DD (optionally with time).
+    let m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return [m[3].padStart(2, '0'), m[2].padStart(2, '0'), m[1]];
+    // Day-first format: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY (with optional spaces).
+    m = v.match(/(\d{1,2})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{2,4})/);
+    if (m) {
+      const year = m[3].length === 2 ? `19${m[3]}` : m[3];
+      return [m[1].padStart(2, '0'), m[2].padStart(2, '0'), year];
+    }
+    return null;
   }
 }

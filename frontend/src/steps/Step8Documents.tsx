@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient, getApiErrorMessage } from '../api/client';
 import { Application } from '../types';
 import WizardLayout from '../components/WizardLayout';
@@ -20,9 +20,19 @@ export default function Step8Documents({ application, onUpdated, onBack }: Props
   });
   const [passportPhotoUrl, setPassportPhotoUrl] = useState<string | null>(null);
   const [ocrStatus, setOcrStatus] = useState<'idle' | 'checking' | 'match' | 'mismatch'>('idle');
-  const [livenessDone, setLivenessDone] = useState(false);
+  const [ocrExtracted, setOcrExtracted] = useState<NonNullable<Application['idOcrExtractedData']> | null>(null);
+  const [livenessVerified, setLivenessVerified] = useState<boolean | null>(null);
+  const [livenessScore, setLivenessScore] = useState<number | null>(null);
+  const [livenessAttempt, setLivenessAttempt] = useState(0);
   const [error, setError] = useState('');
   const [continuing, setContinuing] = useState(false);
+  const ocrTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (ocrTimer.current) clearTimeout(ocrTimer.current);
+    };
+  }, []);
 
   const upload = async (kind: keyof typeof uploaded, file: File) => {
     const formData = new FormData();
@@ -37,12 +47,24 @@ export default function Step8Documents({ application, onUpdated, onBack }: Props
     }
 
     if (kind === 'id_front') {
+      if (ocrTimer.current) clearTimeout(ocrTimer.current);
       setOcrStatus('checking');
-      // Give the backend a moment to finish OCR + IPRS before polling.
-      setTimeout(async () => {
-        const { data } = await apiClient.get<Application>(`/applications/${application.id}`);
-        setOcrStatus(data.idOcrMatchesEnteredData ? 'match' : 'mismatch');
-      }, 1500);
+      const poll = () => {
+        apiClient
+          .get<Application>(`/applications/${application.id}`)
+          .then(({ data }) => {
+            if (data.idOcrCompleted) {
+              setOcrExtracted(data.idOcrExtractedData ?? null);
+              setOcrStatus(data.idOcrMatchesEnteredData ? 'match' : 'mismatch');
+            } else {
+              ocrTimer.current = setTimeout(poll, 2000);
+            }
+          })
+          .catch(() => {
+            ocrTimer.current = setTimeout(poll, 2000);
+          });
+      };
+      ocrTimer.current = setTimeout(poll, 1500);
     }
   };
 
@@ -54,18 +76,36 @@ export default function Step8Documents({ application, onUpdated, onBack }: Props
     livenessGesturePassed: boolean;
   }) => {
     try {
-      await apiClient.post(`/documents/${application.id}/liveness`, result);
-      setLivenessDone(true);
+      const { data } = await apiClient.post<{ verified: boolean; matchScore: number }>(
+        `/documents/${application.id}/liveness`,
+        result,
+      );
+      setLivenessScore(data.matchScore);
+      if (data.verified) {
+        setLivenessVerified(true);
+      } else {
+        setLivenessVerified(false);
+        setError(
+          `Face match failed (${(data.matchScore * 100).toFixed(0)}% similarity). Please retry in good lighting, directly facing the camera.`,
+        );
+        setLivenessAttempt((n) => n + 1);
+      }
     } catch (err: any) {
       setError(getApiErrorMessage(err, 'Liveness verification failed'));
+      setLivenessAttempt((n) => n + 1);
     }
   };
 
   const continueToPayment = async () => {
     setContinuing(true);
-    const { data } = await apiClient.get<Application>(`/applications/${application.id}`);
-    setContinuing(false);
-    onUpdated(data);
+    try {
+      const { data } = await apiClient.get<Application>(`/applications/${application.id}`);
+      setContinuing(false);
+      onUpdated(data);
+    } catch (err: any) {
+      setContinuing(false);
+      setError(getApiErrorMessage(err, 'Failed to load application'));
+    }
   };
 
   return (
@@ -111,22 +151,45 @@ export default function Step8Documents({ application, onUpdated, onBack }: Props
           </p>
         )}
         {ocrStatus === 'mismatch' && (
-          <p className="rounded-lg border border-fortune-terracotta/30 bg-fortune-terracotta/5 p-3 text-sm text-fortune-terracotta">
-            We couldn't automatically confirm your ID scan matches the details you entered. An admin
-            will review this manually — you can still continue.
-          </p>
-        )}
-
-        {uploaded.passport_photo && !livenessDone && (
-          <div className="rounded-lg border border-fortune-ink/10 p-5">
-            <h3 className="mb-3 font-semibold text-fortune-ink">Liveness check</h3>
-            <LivenessCapture passportPhotoUrl={passportPhotoUrl!} onVerified={handleLivenessVerified} />
+          <div className="rounded-lg border border-fortune-terracotta/30 bg-fortune-terracotta/5 p-3 text-sm text-fortune-terracotta">
+            <p className="font-semibold">
+              Your ID scan doesn't fully match the details you entered. This is what we read from your ID:
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>
+                Full names: <span className="font-medium">{ocrExtracted?.fullNameGuess || 'not detected'}</span>
+              </li>
+              <li>
+                ID number: <span className="font-medium">{ocrExtracted?.idNumber || 'not detected'}</span>
+              </li>
+              <li>
+                Date of birth: <span className="font-medium">{ocrExtracted?.dateOfBirth || 'not detected'}</span>
+              </li>
+              <li>
+                Date of issue: <span className="font-medium">{ocrExtracted?.dateOfIssue || 'not detected'}</span>
+              </li>
+            </ul>
+            <p className="mt-2">
+              Please go back to Step 3 and correct your details if they differ, or continue and an admin will review manually.
+            </p>
           </div>
         )}
 
-        {livenessDone && (
+        {uploaded.passport_photo && livenessVerified !== true && (
+          <div className="rounded-lg border border-fortune-ink/10 p-5">
+            <h3 className="mb-3 font-semibold text-fortune-ink">Liveness check</h3>
+            <LivenessCapture
+              key={livenessAttempt}
+              passportPhotoUrl={passportPhotoUrl!}
+              onVerified={handleLivenessVerified}
+            />
+          </div>
+        )}
+
+        {livenessVerified === true && (
           <p className="rounded-lg bg-fortune-greenLight p-3 text-sm text-fortune-greenDark">
-            Liveness check complete — your live photo matches your passport photo.
+            Liveness check passed — your live photo matches your passport photo
+            {livenessScore !== null && ` (${(livenessScore * 100).toFixed(0)}% match).`}
           </p>
         )}
 
@@ -136,7 +199,7 @@ export default function Step8Documents({ application, onUpdated, onBack }: Props
           <button type="button" className="btn-secondary" onClick={onBack}>Back</button>
           <button
             className="btn-primary flex-1"
-            disabled={!allDocsUploaded || !livenessDone || continuing}
+            disabled={!allDocsUploaded || livenessVerified !== true || continuing}
             onClick={continueToPayment}
           >
             {continuing ? 'Continuing…' : 'Continue to payment'}

@@ -21,7 +21,10 @@ export interface LivenessCheckResult {
  */
 @Injectable()
 export class LivenessService {
-  private readonly MATCH_THRESHOLD = 0.75;
+  // Cosine similarity threshold. face-api.js descriptors are unit vectors, so
+  // 0.8 cosine ~= Euclidean distance 0.63, close to face-api.js's recommended
+  // 0.6 — tight enough to reject different faces (random photos score far below).
+  private readonly MATCH_THRESHOLD = 0.8;
 
   evaluate(
     passportEmbedding: number[],

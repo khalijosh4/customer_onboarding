@@ -61,6 +61,7 @@ export class DocumentsService {
       firstName: application.firstName || '',
       lastName: application.lastName || '',
       dateOfBirth: application.dateOfBirth || '',
+      documentIssueDate: application.documentIssueDate || '',
     });
 
     application.idOcrCompleted = true;

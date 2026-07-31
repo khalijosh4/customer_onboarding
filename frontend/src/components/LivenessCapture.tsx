@@ -15,6 +15,7 @@ export default function LivenessCapture({ passportPhotoUrl, onVerified }: Props)
     useLiveness();
   const [status, setStatus] = useState<'idle' | 'scanning' | 'capturing' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [passportReady, setPassportReady] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -40,12 +41,12 @@ export default function LivenessCapture({ passportPhotoUrl, onVerified }: Props)
   useEffect(() => {
     if (blinkDetected && status === 'scanning') {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      capture();
+      capture(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blinkDetected]);
 
-  const capture = async () => {
+  const capture = async (gesturePassed: boolean) => {
     setStatus('capturing');
     setMessage('Blink detected. Matching your face against your passport photo…');
 
@@ -63,7 +64,7 @@ export default function LivenessCapture({ passportPhotoUrl, onVerified }: Props)
 
     setStatus('done');
     setMessage('Liveness check complete.');
-    onVerified({ passportEmbedding, selfieEmbedding, livenessGesturePassed: true });
+    onVerified({ passportEmbedding, selfieEmbedding, livenessGesturePassed: gesturePassed });
   };
 
   if (modelLoadError) {
@@ -73,7 +74,14 @@ export default function LivenessCapture({ passportPhotoUrl, onVerified }: Props)
   return (
     <div className="space-y-3">
       {/* Hidden reference image used to compute the passport-photo embedding */}
-      <img ref={passportImgRef} src={passportPhotoUrl} crossOrigin="anonymous" className="hidden" alt="" />
+      <img
+        ref={passportImgRef}
+        src={passportPhotoUrl}
+        crossOrigin="anonymous"
+        className="hidden"
+        alt=""
+        onLoad={() => setPassportReady(true)}
+      />
 
       <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-xl border border-fortune-ink/15 bg-black">
         <Webcam
@@ -91,10 +99,14 @@ export default function LivenessCapture({ passportPhotoUrl, onVerified }: Props)
         <button
           type="button"
           className="btn-primary w-full"
-          disabled={!modelsLoaded}
+          disabled={!modelsLoaded || !passportReady}
           onClick={startScan}
         >
-          {modelsLoaded ? 'Start liveness check' : 'Loading face verification…'}
+          {!modelsLoaded
+            ? 'Loading face verification…'
+            : !passportReady
+              ? 'Loading passport photo…'
+              : 'Start liveness check'}
         </button>
       )}
 

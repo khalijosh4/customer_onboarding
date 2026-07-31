@@ -55,6 +55,14 @@ export interface Application {
 
   idOcrCompleted?: boolean;
   idOcrMatchesEnteredData?: boolean;
+  idOcrExtractedData?: {
+    rawText?: string;
+    idNumber?: string;
+    fullNameGuess?: string;
+    dateOfBirth?: string;
+    dateOfIssue?: string;
+    dateOfExpiry?: string;
+  };
   iprsVerified?: boolean;
   livenessVerified?: boolean;
 
