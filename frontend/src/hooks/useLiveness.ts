@@ -85,16 +85,28 @@ export function useLiveness() {
     return detection;
   }, []);
 
-  // Extracts a 128-d face descriptor from a still image (video frame or <img>).
-  const extractDescriptor = useCallback(
+  // Detects a face and returns its 128-d descriptor plus the detection confidence.
+  // A low `score` means the model is unsure a real face is present (e.g. random
+  // pictures, scenery, or heavily blurred photos) — callers should reject those.
+  const detectFace = useCallback(
     async (imageElement: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement) => {
-      const detection = await faceapi
-        .detectSingleFace(imageElement, new faceapi.TinyFaceDetectorOptions())
+      const result = await faceapi
+        .detectSingleFace(imageElement, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
-      return detection?.descriptor ? Array.from(detection.descriptor) : null;
+      if (!result) return null;
+      return { descriptor: Array.from(result.descriptor), score: result.detection.score };
     },
     [],
+  );
+
+  // Convenience wrapper returning only the descriptor (used for the selfie frame).
+  const extractDescriptor = useCallback(
+    async (imageElement: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement) => {
+      const result = await detectFace(imageElement);
+      return result?.descriptor ?? null;
+    },
+    [detectFace],
   );
 
   const resetBlink = () => {
@@ -102,5 +114,5 @@ export function useLiveness() {
     wasEyesClosed.current = false;
   };
 
-  return { modelsLoaded, modelLoadError, blinkDetected, processVideoFrame, extractDescriptor, resetBlink };
+  return { modelsLoaded, modelLoadError, blinkDetected, processVideoFrame, detectFace, extractDescriptor, resetBlink };
 }

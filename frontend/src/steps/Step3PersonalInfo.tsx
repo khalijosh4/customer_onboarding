@@ -141,8 +141,17 @@ export default function Step3PersonalInfo({ application, onUpdated, onBack }: Pr
             ))}
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="ID / Passport number">
-              <input className="field-input" required value={form.documentIdNumber} onChange={(e) => update('documentIdNumber', e.target.value)} />
+            <Field label="National ID number">
+              <input
+                className="field-input"
+                required
+                inputMode="numeric"
+                pattern="\d{7,8}"
+                maxLength={8}
+                placeholder="e.g. 42344860 (not the serial number)"
+                value={form.documentIdNumber}
+                onChange={(e) => update('documentIdNumber', e.target.value)}
+              />
             </Field>
             <Field label="Date of issue">
               <input type="date" className="field-input" required value={form.documentIssueDate} onChange={(e) => update('documentIssueDate', e.target.value)} />

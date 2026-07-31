@@ -110,7 +110,7 @@ export class OcrService {
    */
   private parseKenyanId(rawText: string): OcrExtractedIdData {
     const text = rawText.replace(/\r/g, '');
-    const idNumberMatch = text.match(/\b\d{7,9}\b/);
+    const idNumber = this.pickIdNumber(text);
 
     // Dates can be printed as "22.12.2004", "22 / 12 / 2004", "18. 04. 2023",
     // or "2004-12-22" (MRZ), so allow optional spaces and any separator.
@@ -159,7 +159,7 @@ export class OcrService {
 
     return {
       rawText: text,
-      idNumber: idNumberMatch?.[0],
+      idNumber,
       fullNameGuess: nameLines[0] || undefined,
       dateOfBirth,
       dateOfIssue,
@@ -168,13 +168,34 @@ export class OcrService {
   }
 
   /**
+   * Kenyan National ID cards print BOTH the ID number (7–8 digits) and a longer
+   * serial number. The serial often appears first on the card, so picking the
+   * first 7–9 digit run can grab the wrong number. We therefore:
+   *  1. Prefer a 7–8 digit run right after an "ID No." / "No." style label, and
+   *  2. Otherwise prefer the first 7–8 digit run over a 9-digit serial.
+   */
+  private pickIdNumber(text: string): string | undefined {
+    const labelMatch = text.match(
+      /(?:id\s*(?:no|number)?|no\.?\s*|serial\s*no\.?\s*)[:.\-\s]*(\d{7,9})\b/i,
+    );
+    if (labelMatch) return labelMatch[1];
+
+    const candidates = [...text.matchAll(/\b\d{7,9}\b/g)].map((m) => m[0]);
+    if (candidates.length === 0) return undefined;
+    const short = candidates.find((n) => n.length === 7 || n.length === 8);
+    return short || candidates[0];
+  }
+
+  /**
    * Compares OCR-extracted values against what the member typed in Step 3.
    * Uses forgiving/fuzzy comparisons since OCR text is noisy.
    *
    * Matching rules:
    *  - ID number must match (digits-only, allowing OCR to miss/merge a digit).
-   *  - At least 2 of the other fields (first name, last name, DOB, issue date)
-   *    must also match — a single date mis-read by OCR won't fail the check.
+   *  - At least one of date of birth / date of issue must also match. Names
+   *    alone must never be enough — a member who typed a wrong DOB or issue
+   *    date must be flagged, which is why the old "ID + 2 of 4 fields" rule
+   *    was dropped (a correct name could mask two wrong dates).
    */
   matchesEnteredData(
     extracted: OcrExtractedIdData,
@@ -187,15 +208,10 @@ export class OcrService {
     },
   ): boolean {
     const idMatches = this.idsMatch(extracted.idNumber, entered.idNumber);
-
-    const nameHaystack = (extracted.fullNameGuess || extracted.rawText).toUpperCase();
-    const firstNameMatches = !!entered.firstName && nameHaystack.includes(entered.firstName.toUpperCase());
-    const lastNameMatches = !!entered.lastName && nameHaystack.includes(entered.lastName.toUpperCase());
     const dobMatches = this.dobsMatch(extracted.dateOfBirth, entered.dateOfBirth);
     const issueMatches = this.dobsMatch(extracted.dateOfIssue, entered.documentIssueDate || '');
 
-    const fieldMatches = [firstNameMatches, lastNameMatches, dobMatches, issueMatches].filter(Boolean).length;
-    return idMatches && fieldMatches >= 2;
+    return idMatches && (dobMatches || issueMatches);
   }
 
   private idsMatch(extracted?: string, entered?: string): boolean {

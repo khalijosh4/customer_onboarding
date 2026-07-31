@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient, getApiErrorMessage } from '../../api/client';
+import logo from '../../assets/logo.webp';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -29,9 +30,7 @@ export default function AdminLogin() {
     <div className="flex min-h-screen items-center justify-center bg-fortune-ink px-6">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-fortune-green font-display text-xl font-semibold text-white">
-            F
-          </div>
+          <img src={logo} alt="Fortune Sacco" className="mx-auto mb-3 h-12 w-12 object-contain" />
           <h1 className="font-display text-xl font-semibold text-fortune-ink">Fortune Sacco Admin</h1>
           <p className="text-sm text-fortune-ink/50">Application review portal</p>
         </div>

@@ -68,6 +68,9 @@ export interface Application {
 
   paymentCompleted?: boolean;
   amountPaid?: number;
+
+  cbsCustomerNumber?: string;
+  rejectionReason?: string;
 }
 
 export interface CatalogResponse {

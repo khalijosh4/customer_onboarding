@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Navigate, Outlet, useNavigate } from 'react-router-dom';
+import logo from '../../assets/logo.webp';
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -20,20 +21,18 @@ export default function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-fortune-cream">
-      <header className="border-b border-fortune-ink/10 bg-white">
+      <header className="bg-gradient-to-r from-fortune-blue via-fortune-blueDark to-fortune-green">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-fortune-green font-display text-base font-semibold text-white">
-              F
-            </div>
+            <img src={logo} alt="Fortune Sacco" className="h-9 w-9 shrink-0 object-contain" />
             <div>
-              <p className="font-display font-semibold leading-tight text-fortune-ink">Fortune Sacco Admin</p>
-              <p className="text-xs text-fortune-ink/50">Application review portal</p>
+              <p className="font-display font-semibold leading-tight text-white">Fortune Sacco Admin</p>
+              <p className="text-xs text-white/75">Your Success, Our Success · Review portal</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-fortune-ink/60">{name}</span>
-            <button onClick={logout} className="text-sm font-semibold text-fortune-terracotta">
+            <span className="text-sm text-white/80">{name}</span>
+            <button onClick={logout} className="text-sm font-semibold text-white underline-offset-2 hover:underline">
               Log out
             </button>
           </div>

@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import StepIndicator from './StepIndicator';
+import logo from '../assets/logo.webp';
 
 export default function WizardLayout({
   currentStep,
@@ -14,16 +15,12 @@ export default function WizardLayout({
 }) {
   return (
     <div className="min-h-screen bg-fortune-cream">
-      <header className="border-b border-fortune-ink/10 bg-white">
+      <header className="bg-gradient-to-r from-fortune-blue via-fortune-blueDark to-fortune-green">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-fortune-green font-display text-lg font-semibold text-white">
-            F
-          </div>
+          <img src={logo} alt="Fortune Sacco" className="h-10 w-10 shrink-0 object-contain" />
           <div>
-            <p className="font-display text-lg font-semibold leading-tight text-fortune-ink">
-              Fortune Sacco
-            </p>
-            <p className="text-xs text-fortune-ink/50">Member Onboarding · Shilingi by shilingi</p>
+            <p className="font-display text-lg font-semibold leading-tight text-white">Fortune Sacco</p>
+            <p className="text-xs text-white/75">Member Onboarding · Your Success, Our Success</p>
           </div>
         </div>
       </header>

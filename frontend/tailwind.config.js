@@ -5,6 +5,9 @@ export default {
     extend: {
       colors: {
         fortune: {
+          blue: '#0B5FA5',
+          blueDark: '#084078',
+          blueLight: '#E6F1FA',
           green: '#0B6E4F',
           greenDark: '#054A35',
           greenLight: '#E4F2EC',
