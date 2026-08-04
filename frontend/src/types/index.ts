@@ -64,6 +64,15 @@ export interface Application {
     dateOfExpiry?: string;
   };
   iprsVerified?: boolean;
+  iprsResponse?: {
+    source?: 'live' | 'mock';
+    iprsFullName?: string;
+    iprsDateOfBirth?: string;
+    iprsSerialNumber?: string;
+    iprsGender?: string;
+    matchedFields?: { name: boolean; dateOfBirth: boolean };
+    error?: string;
+  };
   livenessVerified?: boolean;
 
   paymentCompleted?: boolean;

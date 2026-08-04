@@ -13,19 +13,23 @@ import Step9Payment from '../steps/Step9Payment';
 import CompletionScreen from '../steps/CompletionScreen';
 
 export default function OnboardingWizard() {
-  const { application, loading, setApplication, startNewApplication } = useOnboarding();
+  const { application, loading, loadError, setApplication, retry } = useOnboarding();
   const [viewStep, setViewStep] = useState(1);
 
   useEffect(() => {
     if (application) setViewStep(application.currentStep);
   }, [application?.id]);
 
-  useEffect(() => {
-    if (!loading && !application) {
-      startNewApplication();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-fortune-cream px-6 text-center">
+        <p className="field-error">{loadError}</p>
+        <button type="button" className="btn-primary" onClick={() => retry()}>
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !application) {
     return (

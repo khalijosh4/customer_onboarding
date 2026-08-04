@@ -1,8 +1,11 @@
 import axios from 'axios';
 
-// Point this at your backend's public URL in production (e.g. via a .env
-// file consumed by Vite as VITE_API_BASE_URL).
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+// Requests go to the SAME origin the page is served from ('/api'), which the
+// dev server proxies to the backend (see vite.config.ts). This makes the app
+// work when opened from a phone on the same network (e.g. http://10.x.x.x:5175)
+// where 'localhost' would point at the phone itself. For a production build,
+// set VITE_API_BASE_URL to your real API URL.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

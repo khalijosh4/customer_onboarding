@@ -30,7 +30,7 @@ export default function AdminLogin() {
     <div className="flex min-h-screen items-center justify-center bg-fortune-ink px-6">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
         <div className="mb-6 text-center">
-          <img src={logo} alt="Fortune Sacco" className="mx-auto mb-3 h-12 w-12 object-contain" />
+          <img src={logo} alt="Fortune Sacco" className="mx-auto mb-3 h-20 w-20 object-contain" />
           <h1 className="font-display text-xl font-semibold text-fortune-ink">Fortune Sacco Admin</h1>
           <p className="text-sm text-fortune-ink/50">Application review portal</p>
         </div>

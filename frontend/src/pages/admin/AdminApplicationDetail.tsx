@@ -85,7 +85,10 @@ export default function AdminApplicationDetail() {
         <div className="mb-6 flex flex-wrap gap-2">
           <Badge ok={app.phoneVerified} label="Phone verified" />
           <Badge ok={app.idOcrMatchesEnteredData} label="ID OCR match" />
-          <Badge ok={app.iprsVerified} label="IPRS verified" />
+          <Badge
+            ok={app.iprsVerified}
+            label={app.iprsResponse?.source === 'live' ? 'IPRS verified (live)' : 'IPRS verified'}
+          />
           <Badge ok={app.livenessVerified} label="Liveness verified" />
           <Badge ok={app.paymentCompleted} label="Payment received" />
         </div>
@@ -97,6 +100,9 @@ export default function AdminApplicationDetail() {
             <Row label="Date of birth" value={app.dateOfBirth} />
             <Row label="Marital status" value={app.maritalStatus} />
             <Row label="ID / Passport number" value={app.documentIdNumber} />
+            <Row label="IPRS full name" value={app.iprsResponse?.iprsFullName} />
+            <Row label="IPRS date of birth" value={app.iprsResponse?.iprsDateOfBirth} />
+            <Row label="IPRS serial number" value={app.iprsResponse?.iprsSerialNumber} />
             <Row label="County / Town" value={`${app.countyOfResidence}, ${app.cityOrTown}`} />
             <Row label="Physical address" value={app.physicalAddress} />
           </Section>

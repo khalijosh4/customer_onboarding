@@ -17,7 +17,7 @@ export default function WizardLayout({
     <div className="min-h-screen bg-fortune-cream">
       <header className="bg-gradient-to-r from-fortune-blue via-fortune-blueDark to-fortune-green">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <img src={logo} alt="Fortune Sacco" className="h-10 w-10 shrink-0 object-contain" />
+          <img src={logo} alt="Fortune Sacco" className="h-16 w-16 shrink-0 object-contain" />
           <div>
             <p className="font-display text-lg font-semibold leading-tight text-white">Fortune Sacco</p>
             <p className="text-xs text-white/75">Member Onboarding · Your Success, Our Success</p>

@@ -73,6 +73,7 @@ export class DocumentsService {
       firstName: application.firstName,
       lastName: application.lastName,
       otherNames: application.otherNames,
+      dateOfBirth: application.dateOfBirth,
     });
 
     application.iprsVerified = iprsResult.matched;

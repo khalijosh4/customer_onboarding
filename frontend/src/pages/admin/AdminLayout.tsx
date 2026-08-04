@@ -24,7 +24,7 @@ export default function AdminLayout() {
       <header className="bg-gradient-to-r from-fortune-blue via-fortune-blueDark to-fortune-green">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Fortune Sacco" className="h-9 w-9 shrink-0 object-contain" />
+            <img src={logo} alt="Fortune Sacco" className="h-14 w-14 shrink-0 object-contain" />
             <div>
               <p className="font-display font-semibold leading-tight text-white">Fortune Sacco Admin</p>
               <p className="text-xs text-white/75">Your Success, Our Success · Review portal</p>

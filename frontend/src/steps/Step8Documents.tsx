@@ -150,6 +150,21 @@ export default function Step8Documents({ application, onUpdated, onBack }: Props
             ID scan matches the details you entered.
           </p>
         )}
+        {ocrStatus === 'checking' && <p className="text-sm text-fortune-ink/60">Checking against government records…</p>}
+        {ocrStatus === 'match' && application.iprsVerified === true && (
+          <p className="rounded-lg bg-fortune-greenLight p-3 text-sm text-fortune-greenDark">
+            Your details were verified against government records{application.iprsResponse?.iprsFullName
+              ? ` (${application.iprsResponse.iprsFullName})`
+              : ''}.
+            {application.iprsResponse?.source === 'mock' ? ' (demo mode)' : ''}
+          </p>
+        )}
+        {ocrStatus === 'match' && application.iprsVerified === false && application.iprsResponse?.error && (
+          <p className="rounded-lg border border-fortune-goldDark/30 bg-fortune-goldDark/5 p-3 text-sm text-fortune-goldDark">
+            Government record check could not be completed: {application.iprsResponse.error}. An admin will review your
+            application manually.
+          </p>
+        )}
         {ocrStatus === 'mismatch' && (
           <div className="rounded-lg border border-fortune-terracotta/30 bg-fortune-terracotta/5 p-3 text-sm text-fortune-terracotta">
             <p className="font-semibold">
