@@ -118,25 +118,30 @@ export default function Step8Documents({ application, onUpdated, onBack }: Props
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <DocumentUploadBox
             label="National ID / Passport — front"
-            hint="Make sure all text is clear and unobstructed"
+            hint="Fit the whole card inside the box, text side facing you"
+            guide="id"
             uploaded={uploaded.id_front}
             onFileSelected={(f) => upload('id_front', f)}
           />
           <DocumentUploadBox
             label="National ID — back"
             hint="Skip if you're using a passport"
+            guide="id"
             uploaded={uploaded.id_back}
             onFileSelected={(f) => upload('id_back', f)}
           />
           <DocumentUploadBox
             label="Signature"
             hint="Sign on plain paper and photograph it"
+            guide="signature"
             uploaded={uploaded.signature}
             onFileSelected={(f) => upload('signature', f)}
           />
           <DocumentUploadBox
             label="Passport-size photo"
-            hint="Clear, front-facing, good lighting"
+            hint="Upload a recent photo or take one"
+            guide="passport"
+            preferUpload
             uploaded={uploaded.passport_photo}
             onFileSelected={(f) => upload('passport_photo', f)}
           />

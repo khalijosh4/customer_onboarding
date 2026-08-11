@@ -218,6 +218,9 @@ export class Application {
   mpesaCheckoutRequestId: string;
 
   @Column({ nullable: true })
+  merchantRequestId: string;
+
+  @Column({ nullable: true })
   mpesaReceiptNumber: string;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })

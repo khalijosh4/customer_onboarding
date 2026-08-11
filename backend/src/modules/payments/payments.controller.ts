@@ -1,37 +1,53 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Param, Post } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly service: PaymentsService) {}
 
-  @Post(':applicationId/mpesa/stk-push')
-  initiate(@Param('applicationId') applicationId: string) {
-    return this.service.initiateAccountOpeningPayment(applicationId);
+  @Post(':applicationId/stk-push')
+  initiate(@Param('applicationId') applicationId: string, @Body() body: { phoneNumber?: string }) {
+    return this.service.initiateAccountOpeningPayment(applicationId, body?.phoneNumber);
   }
 
-  // Public endpoint Safaricom Daraja POSTs to once the customer completes
+  // Public endpoint the Fortune C2B gateway POSTs to once the customer completes
   // (or cancels) the STK push prompt on their phone. Must be reachable over
-  // HTTPS from the internet (configure MPESA_CALLBACK_URL accordingly).
-  @Post('mpesa/callback')
+  // HTTPS from the internet (configure FORTUNE_PAYMENTS_CALLBACK_URL accordingly).
+  @Post('callback')
   async callback(@Body() body: any) {
     const stkCallback = body?.Body?.stkCallback;
     if (!stkCallback) return { ResultCode: 0, ResultDesc: 'Accepted' };
 
     const success = stkCallback.ResultCode === 0;
     const checkoutRequestId = stkCallback.CheckoutRequestID;
+    const merchantRequestId = stkCallback.MerchantRequestID;
     const receiptItem = stkCallback.CallbackMetadata?.Item?.find(
       (i: any) => i.Name === 'MpesaReceiptNumber',
     );
 
-    await this.service.confirmPayment(checkoutRequestId, receiptItem?.Value, success);
+    await this.service.confirmPayment(checkoutRequestId, merchantRequestId, receiptItem?.Value, success);
     return { ResultCode: 0, ResultDesc: 'Accepted' };
   }
 
-  // Convenience endpoint for local development when MPESA credentials are
-  // not yet configured — marks the application as paid without a real STK push.
-  @Post(':applicationId/mpesa/dev-simulate')
+  // Convenience endpoint for local development — marks the application as paid
+  // without a real STK push.
+  @Post(':applicationId/dev-simulate')
   simulate(@Param('applicationId') applicationId: string) {
     return this.service.devSimulatePayment(applicationId);
+  }
+
+  // Diagnostic: sends a real KES 1 STK push to verify gateway auth + contract.
+  // POST /api/payments/test {"phoneNumber":"2547xxxxxxxx"}
+  @Post('test')
+  test(@Body() body: { phoneNumber?: string; amount?: number }) {
+    if (!body.phoneNumber) throw new BadRequestException('phoneNumber is required');
+    return this.service.testStkPush(body.phoneNumber, body.amount);
+  }
+
+  // Re-registers the callback URL (also happens automatically before each push).
+  // Useful for debugging the challenge-response flow.
+  @Post('register-callback')
+  registerCallback() {
+    return this.service.registerCallback();
   }
 }

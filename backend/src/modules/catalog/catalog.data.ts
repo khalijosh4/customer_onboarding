@@ -71,4 +71,5 @@ export const SERVICES = [
   },
 ];
 
-export const SHARE_VALUE_KES = 100;
+// Low value for live testing; raise before production.
+export const SHARE_VALUE_KES = 1;
