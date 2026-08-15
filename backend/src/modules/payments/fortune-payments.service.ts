@@ -148,10 +148,27 @@ export class FortunePaymentsService {
     return { success: false, error: JSON.stringify(data) };
   }
 
+  private isInvalidTokenError(err: any): boolean {
+    const detail = err?.detail ?? err?.response?.data ?? err?.message ?? err;
+    return JSON.stringify(detail).includes('Invalid or expired token');
+  }
+
   private async ensureCallbackRegistered(): Promise<void> {
     if (this.callbackRegistered) return;
     const result = await this.registerCallbackUrl();
     if (!result.success) {
+      // The gateway may have invalidated the cached token (e.g. another process
+      // shares the client credentials). Refresh once and retry before giving up.
+      if (this.isInvalidTokenError(result.error)) {
+        this.logger.warn('Fortune C2B token invalid during callback registration, refreshing');
+        this.tokenCache = null;
+        const retry = await this.registerCallbackUrl();
+        if (retry.success) {
+          this.callbackRegistered = true;
+          return;
+        }
+        result.error = retry.error;
+      }
       throw new BadRequestException(
         `Could not register the Fortune C2B callback URL: ${result.error || 'unknown error'}`,
       );
@@ -161,7 +178,20 @@ export class FortunePaymentsService {
 
   async stkPush(params: FortuneStkPushParams): Promise<FortuneStkPushResult> {
     await this.ensureCallbackRegistered();
+    try {
+      return await this.sendStkPush(params);
+    } catch (err: any) {
+      // Gateway invalidated the cached token; refresh and retry the push once.
+      if (this.isInvalidTokenError(err)) {
+        this.logger.warn('Fortune C2B token invalid during STK push, refreshing and retrying');
+        this.tokenCache = null;
+        return this.sendStkPush(params);
+      }
+      throw err;
+    }
+  }
 
+  private async sendStkPush(params: FortuneStkPushParams): Promise<FortuneStkPushResult> {
     const url = `${this.baseUrl}/payments/stk_push`;
     const token = await this.getAccessToken();
 
@@ -186,7 +216,11 @@ export class FortunePaymentsService {
     } catch (err: any) {
       const detail = err?.response?.data ?? err?.message;
       this.logger.error(`Fortune C2B request failed: ${JSON.stringify(detail)}`);
-      throw new BadRequestException(`Fortune C2B request failed: ${JSON.stringify(detail)}`);
+      const wrapped = new BadRequestException(
+        `Fortune C2B request failed: ${JSON.stringify(detail)}`,
+      );
+      (wrapped as any).detail = detail;
+      throw wrapped;
     }
 
     const data = response.data;
