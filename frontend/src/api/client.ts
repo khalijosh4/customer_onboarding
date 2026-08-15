@@ -28,3 +28,21 @@ apiClient.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// If an admin API call returns 401 the stored session is stale or expired
+// (the JWT has an 8h TTL). Clear it and bounce to the login screen instead
+// of leaving a wall of uncaught "401 Unauthorized" errors on the dashboard.
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && error?.config?.url?.startsWith('/admin')) {
+      const onLoginPage = window.location.pathname.endsWith('/login');
+      localStorage.removeItem('fortune_admin_token');
+      localStorage.removeItem('fortune_admin_name');
+      if (window.location.pathname.startsWith('/admin') && !onLoginPage) {
+        window.location.assign('/admin/login');
+      }
+    }
+    return Promise.reject(error);
+  },
+);

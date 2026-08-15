@@ -33,9 +33,12 @@ export class PaymentsService {
     const sharesTotal = (application.numberOfShares || 0) * shareValue;
     const amount = Math.max(minAmount, sharesTotal);
 
-    // Settlement: the Fortune gateway credits the member's Sacco account using
-    // the business number + the member's national ID as the account number.
+    // Settlement: the Fortune gateway credits the Sacco account using the
+    // business number + account number. Use the explicitly configured test
+    // account (FORTUNE_PAYMENTS_ACCOUNT_NUMBER) when present, otherwise fall
+    // back to the member's national ID / reference number.
     const accountNumber =
+      this.config.get<string>('FORTUNE_PAYMENTS_ACCOUNT_NUMBER', '') ||
       application.documentIdNumber ||
       application.referenceNumber ||
       application.phoneNumber;
@@ -116,7 +119,9 @@ export class PaymentsService {
       phoneNumber,
       amount,
       reason: 'Fortune C2B API test',
-      accountNumber: 'TEST',
+      // Use the configured settlement account; nothing signals a real credit.
+      accountNumber:
+        this.config.get<string>('FORTUNE_PAYMENTS_ACCOUNT_NUMBER', '') || 'TEST',
       businessNumber: this.config.get<string>('FORTUNE_PAYMENTS_BUSINESS_NUMBER', '852648'),
     });
   }

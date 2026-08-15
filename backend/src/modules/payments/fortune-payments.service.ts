@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { join } from 'path';
 import axios from 'axios';
 
@@ -30,7 +30,13 @@ export class FortunePaymentsService {
   private callbackRegistered = false;
 
   constructor(private readonly config: ConfigService) {
-    this.loadStoredRegistration();
+    // Don't trust a stored registration: ephemeral tunnels (e.g. trycloudflare)
+    // die between restarts, so a persisted URL can silently be dead. Re-validate
+    // on every boot - a dead URL fails loudly on the first push and recovers
+    // automatically as soon as the tunnel is back up.
+    this.ensureCallbackRegistered().catch((err) => {
+      this.logger.warn(`Initial callback registration failed: ${err.message}`);
+    });
   }
 
   private get baseUrl(): string {
@@ -42,20 +48,6 @@ export class FortunePaymentsService {
 
   private get credentialsPath(): string {
     return join(process.cwd(), 'webhook-credentials.json');
-  }
-
-  private loadStoredRegistration() {
-    try {
-      if (existsSync(this.credentialsPath)) {
-        const stored = JSON.parse(readFileSync(this.credentialsPath, 'utf8'));
-        if (stored?.callback_url === this.config.get<string>('FORTUNE_PAYMENTS_CALLBACK_URL')) {
-          this.callbackRegistered = true;
-          this.logger.log('Loaded stored Fortune C2B webhook registration');
-        }
-      }
-    } catch {
-      // Ignore malformed/absent credential file.
-    }
   }
 
   private persistSecretKey(secretKey: string) {

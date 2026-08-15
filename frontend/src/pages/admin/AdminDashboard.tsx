@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiClient } from '../../api/client';
+import { apiClient, getApiErrorMessage } from '../../api/client';
 import { Application } from '../../types';
 
 const STATUS_FILTERS: { label: string; value: Application['status'] | '' }[] = [
@@ -23,6 +23,7 @@ export default function AdminDashboard() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [filter, setFilter] = useState<Application['status'] | ''>('submitted');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     load();
@@ -31,11 +32,18 @@ export default function AdminDashboard() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await apiClient.get<Application[]>('/admin/applications', {
-      params: filter ? { status: filter } : {},
-    });
-    setApplications(data);
-    setLoading(false);
+    try {
+      const { data } = await apiClient.get<Application[]>('/admin/applications', {
+        params: filter ? { status: filter } : {},
+      });
+      setApplications(data);
+      setError('');
+    } catch (err: any) {
+      setApplications([]);
+      setError(getApiErrorMessage(err, 'Could not load applications. Please retry.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,6 +66,8 @@ export default function AdminDashboard() {
 
       {loading ? (
         <p className="text-fortune-ink/60">Loading…</p>
+      ) : error ? (
+        <p className="rounded-xl bg-fortune-terracotta/10 p-4 text-sm text-fortune-terracotta">{error}</p>
       ) : applications.length === 0 ? (
         <p className="text-fortune-ink/60">No applications found for this filter.</p>
       ) : (

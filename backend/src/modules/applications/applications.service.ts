@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { Application, ApplicationStatus } from './entities/application.entity';
 import {
   ConsentDto,
@@ -19,14 +19,54 @@ export class ApplicationsService {
 
   // Step 1 kicks off with an empty draft application before phone OTP is sent.
   async createDraft(): Promise<Application> {
-    const count = await this.repo.count();
-    const referenceNumber = `FS-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`;
-    const application = this.repo.create({
-      referenceNumber,
-      status: ApplicationStatus.DRAFT,
-      currentStep: 1,
-    });
-    return this.repo.save(application);
+    // Concurrent requests (e.g. a page refresh while a draft is still creating,
+    // or two tabs opened at once) can calculate the same next number and then
+    // collide on the unique referenceNumber column. Retry on a unique violation
+    // until we claim an unused number instead of surfacing a 500.
+    const MAX_ATTEMPTS = 20;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const referenceNumber = await this.nextReferenceNumber();
+      try {
+        const application = this.repo.create({
+          referenceNumber,
+          status: ApplicationStatus.DRAFT,
+          currentStep: 1,
+        });
+        return await this.repo.save(application);
+      } catch (err) {
+        if (!this.isReferenceCollision(err)) throw err;
+        // Another request claimed this number first - loop and take the next one.
+      }
+    }
+    throw new ConflictException('Could not allocate a reference number. Please retry.');
+  }
+
+  private async nextReferenceNumber(): Promise<string> {
+    const currentYear = new Date().getFullYear();
+    const prefix = `FS-${currentYear}-`;
+    // Compute the next number from the highest existing number for this year, so
+    // gaps/deletions can never collide with the unique column.
+    const row = await this.repo
+      .createQueryBuilder('app')
+      .select('MAX(app.referenceNumber)', 'max')
+      .where('app.referenceNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .getRawOne<{ max: string | null }>();
+    const lastNumber = row?.max ? parseInt(row.max.slice(prefix.length), 10) || 0 : 0;
+    return `${prefix}${String(lastNumber + 1).padStart(6, '0')}`;
+  }
+
+  private isReferenceCollision(err: unknown): boolean {
+    if (!(err instanceof QueryFailedError)) return false;
+    const driverError: any = (err as any).driverError;
+    if (!driverError) return false;
+    const constraint = String(driverError.constraint ?? '');
+    if (/referenceNumber/i.test(constraint)) return true;
+    const code = String(driverError.code ?? '').toUpperCase();
+    if (code === '23505') return true; // PostgreSQL unique violation
+    if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT') return true; // SQLite
+    const message = String(driverError.message ?? '');
+    if (driverError.errorNum === 1 || /ORA-00001|UNIQUE CONSTRAINT/i.test(message)) return true; // Oracle
+    return false;
   }
 
   async findOneOrFail(id: string): Promise<Application> {

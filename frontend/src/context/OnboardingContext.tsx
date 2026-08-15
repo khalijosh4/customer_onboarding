@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { apiClient, getApiErrorMessage } from '../api/client';
 import { Application } from '../types';
 
@@ -49,31 +49,44 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const initInFlight = useRef<Promise<void> | null>(null);
+
   // Loads the in-progress application (or creates a fresh one). If the backend
   // is unreachable the error is surfaced so the user sees *why* the screen was
-  // stuck, instead of an infinite spinner.
+  // stuck, instead of an infinite spinner. In dev, React StrictMode fires this
+  // effect twice on mount, so guard against two concurrent init calls (which
+  // otherwise both POST a blank application and race on the reference number).
   const init = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    const id = localStorage.getItem(STORAGE_KEY);
-    try {
-      if (id) {
-        try {
-          const { data } = await apiClient.get<Application>(`/applications/${id}`);
-          setApplicationState(data);
-          return;
-        } catch {
-          // Stale id — fall through and create a new application.
-          localStorage.removeItem(STORAGE_KEY);
+    if (initInFlight.current) return initInFlight.current;
+    const task = (async () => {
+      setLoading(true);
+      setLoadError(null);
+      const id = localStorage.getItem(STORAGE_KEY);
+      try {
+        if (id) {
+          try {
+            const { data } = await apiClient.get<Application>(`/applications/${id}`);
+            setApplicationState(data);
+            return;
+          } catch {
+            // Stale id — fall through and create a new application.
+            localStorage.removeItem(STORAGE_KEY);
+          }
         }
+        const { data } = await apiClient.post<Application>('/applications');
+        setApplicationState(data);
+        localStorage.setItem(STORAGE_KEY, data.id);
+      } catch (err) {
+        setLoadError(getApiErrorMessage(err, 'Could not reach the server. Make sure the backend is running and try again.'));
+      } finally {
+        setLoading(false);
       }
-      const { data } = await apiClient.post<Application>('/applications');
-      setApplicationState(data);
-      localStorage.setItem(STORAGE_KEY, data.id);
-    } catch (err) {
-      setLoadError(getApiErrorMessage(err, 'Could not reach the server. Make sure the backend is running and try again.'));
+    })();
+    initInFlight.current = task;
+    try {
+      return await task;
     } finally {
-      setLoading(false);
+      if (initInFlight.current === task) initInFlight.current = null;
     }
   }, []);
 
