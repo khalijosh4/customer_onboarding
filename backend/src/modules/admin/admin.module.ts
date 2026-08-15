@@ -11,6 +11,7 @@ import { AdminUser } from './entities/admin-user.entity';
 import { Application } from '../applications/entities/application.entity';
 import { ApplicationsModule } from '../applications/applications.module';
 import { CbsModule } from '../cbs/cbs.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CbsModule } from '../cbs/cbs.module';
     PassportModule,
     ApplicationsModule,
     CbsModule,
+    PaymentsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

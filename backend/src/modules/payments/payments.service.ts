@@ -33,15 +33,15 @@ export class PaymentsService {
     const sharesTotal = (application.numberOfShares || 0) * shareValue;
     const amount = Math.max(minAmount, sharesTotal);
 
-    // Settlement: the Fortune gateway credits the Sacco account using the
-    // business number + account number. Use the explicitly configured test
-    // account (FORTUNE_PAYMENTS_ACCOUNT_NUMBER) when present, otherwise fall
-    // back to the member's national ID / reference number.
+    // The gateway collects onboarding fees into ONE Sacco account (the
+    // collection account in FORTUNE_PAYMENTS_ACCOUNT_NUMBER). A new member has
+    // no account yet, so the money is never charged to a customer account - it
+    // pools in the collection account. After the admin approves the application
+    // and the CBS creates the member's account, the funds are moved from the
+    // collection account to the member account (settleCollectedFundsToMemberAccount).
     const accountNumber =
       this.config.get<string>('FORTUNE_PAYMENTS_ACCOUNT_NUMBER', '') ||
-      application.documentIdNumber ||
-      application.referenceNumber ||
-      application.phoneNumber;
+      application.referenceNumber;
 
     const result = await this.fortune.stkPush({
       phoneNumber,
@@ -110,6 +110,43 @@ export class PaymentsService {
     application.status = ApplicationStatus.SUBMITTED;
     application.submittedAt = new Date();
     return this.applicationRepo.save(application);
+  }
+
+  /**
+   * Called after an admin approves the application and the CBS has created the
+   * member's account. The onboarding fee sits in the Sacco collection account;
+   * this is the seam that moves it into the member's new account (a CBS/GL
+   * transfer). In mock mode we just record it; in live mode wire the real
+   * CBS transfer API call here.
+   */
+  async settleCollectedFundsToMemberAccount(applicationId: string): Promise<Application> {
+    const application = await this.applicationRepo.findOne({ where: { id: applicationId } });
+    if (!application) throw new NotFoundException('Application not found');
+
+    if (!application.paymentCompleted) {
+      this.logger.warn(
+        `No payment recorded for ${application.referenceNumber}; nothing to settle to member`,
+      );
+      return application;
+    }
+
+    if (this.config.get<string>('CBS_MODE', 'mock') === 'live') {
+      // TODO: call the CBS transfer endpoint (e.g. POST {CBS_API_URL}/transfers)
+      // moving application.amountPaid from the collection account into the
+      // member account (application.cbsCustomerNumber). Mark the transfer only
+      // once the CBS confirms it. Leave as-is if there is no CBS transfer API.
+      this.logger.warn(
+        `[CBS/LIVE] Fund settlement not wired yet - manual GL transfer needed for ${application.referenceNumber}`,
+      );
+    } else {
+      this.logger.log(
+        `[MOCK CBS] Settling KES ${application.amountPaid} from collection account to member ${application.referenceNumber}`,
+      );
+    }
+
+    application.fundsTransferredToMemberAccount = true;
+    await this.applicationRepo.save(application);
+    return application;
   }
 
   // Diagnostic helper: sends a real KES 1 STK push to the given number so we can

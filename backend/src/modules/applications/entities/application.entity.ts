@@ -229,6 +229,11 @@ export class Application {
   @Column({ type: 'timestamptz', nullable: true })
   submittedAt: Date;
 
+  // True once the collected onboarding fee (held in the Sacco collection
+  // account) has been moved into the member's account after CBS created it.
+  @Column({ default: false })
+  fundsTransferredToMemberAccount: boolean;
+
   // ---------- Admin review / CBS ----------
   @Column({ nullable: true })
   reviewedByAdminId: string;

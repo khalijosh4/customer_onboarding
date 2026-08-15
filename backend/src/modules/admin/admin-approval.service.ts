@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Application, ApplicationStatus } from '../applications/entities/application.entity';
 import { CbsService } from '../cbs/cbs.service';
+import { PaymentsService } from '../payments/payments.service';
 
 /**
  * This is the critical hand-off point between the admin dashboard and the
@@ -17,6 +18,7 @@ export class AdminApprovalService {
   constructor(
     @InjectRepository(Application) private readonly repo: Repository<Application>,
     private readonly cbs: CbsService,
+    private readonly payments: PaymentsService,
   ) {}
 
   async approveAndPushToCbs(applicationId: string, adminId: string) {
@@ -39,6 +41,11 @@ export class AdminApprovalService {
       application.pushedToCbsAt = new Date();
       application.cbsCustomerNumber = cbsResult.cbsCustomerNumber;
       await this.repo.save(application);
+
+      // The member's account now exists in the CBS, so move the onboarding fee
+      // that was collected into the Sacco collection account across to them.
+      // Return the freshly-settled record so the response reflects the transfer.
+      return this.payments.settleCollectedFundsToMemberAccount(application.id);
     }
 
     return application;

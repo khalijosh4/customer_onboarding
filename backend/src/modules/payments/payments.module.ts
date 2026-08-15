@@ -10,5 +10,6 @@ import { Application } from '../applications/entities/application.entity';
   imports: [TypeOrmModule.forFeature([Application])],
   providers: [PaymentsService, FortunePaymentsService],
   controllers: [PaymentsController, StkCallbackController],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}
