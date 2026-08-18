@@ -8,8 +8,6 @@ export interface FortuneStkPushParams {
   phoneNumber: string;
   amount: number;
   reason: string;
-  accountNumber: string;
-  businessNumber: string;
 }
 
 export interface FortuneStkPushResult {
@@ -195,13 +193,16 @@ export class FortunePaymentsService {
     const url = `${this.baseUrl}/payments/stk_push`;
     const token = await this.getAccessToken();
 
+    // The gateway is Fortune's own C2B STK push API. Its documented contract is
+    // exactly these four fields - it already knows which PayBill to push to, and
+    // the customer/account reference goes in `reason`. Sending extra fields
+    // (business_number / account_number) is non-standard and Safaricom rejects
+    // the resulting push.
     const body: Record<string, unknown> = {
       amount: params.amount,
       phone_number: this.formatMsisdn(params.phoneNumber),
       reason: params.reason,
       callback_url: this.config.get<string>('FORTUNE_PAYMENTS_CALLBACK_URL', ''),
-      business_number: params.businessNumber,
-      account_number: params.accountNumber,
     };
 
     this.logger.log(

@@ -33,22 +33,19 @@ export class PaymentsService {
     const sharesTotal = (application.numberOfShares || 0) * shareValue;
     const amount = Math.max(minAmount, sharesTotal);
 
-    // The gateway collects onboarding fees into ONE Sacco account (the
-    // collection account in FORTUNE_PAYMENTS_ACCOUNT_NUMBER). A new member has
-    // no account yet, so the money is never charged to a customer account - it
-    // pools in the collection account. After the admin approves the application
-    // and the CBS creates the member's account, the funds are moved from the
-    // collection account to the member account (settleCollectedFundsToMemberAccount).
-    const accountNumber =
-      this.config.get<string>('FORTUNE_PAYMENTS_ACCOUNT_NUMBER', '') ||
+    // The gateway's C2B contract has no account_number field - the customer/account
+    // reference goes in `reason` (documented as "payment description or account for
+    // the customer"). Use the customer's national ID while onboarding, falling back
+    // to their member account number or the draft reference.
+    const customerReference =
+      application.documentIdNumber ||
+      application.cbsCustomerNumber ||
       application.referenceNumber;
 
     const result = await this.fortune.stkPush({
       phoneNumber,
       amount,
-      reason: `Fortune Sacco account opening - ${application.referenceNumber}`,
-      accountNumber,
-      businessNumber: this.config.get<string>('FORTUNE_PAYMENTS_BUSINESS_NUMBER', '852648'),
+      reason: `Fortune Sacco account opening - ${customerReference}`,
     });
 
     application.mpesaCheckoutRequestId = result.requestId;
@@ -149,17 +146,16 @@ export class PaymentsService {
     return application;
   }
 
-  // Diagnostic helper: sends a real KES 1 STK push to the given number so we can
-  // verify the gateway auth + request contract end to end.
-  async testStkPush(phoneNumber: string, amount = 1) {
+  // Diagnostic helper: sends a real STK push to the given number so we can
+  // verify the gateway auth + request contract end to end. The reference is the
+  // customer/account identifier embedded in `reason` (the C2B contract has no
+  // separate account field).
+  async testStkPush(phoneNumber: string, amount = 1, reference?: string) {
+    const ref = reference?.trim();
     return this.fortune.stkPush({
       phoneNumber,
       amount,
-      reason: 'Fortune C2B API test',
-      // Use the configured settlement account; nothing signals a real credit.
-      accountNumber:
-        this.config.get<string>('FORTUNE_PAYMENTS_ACCOUNT_NUMBER', '') || 'TEST',
-      businessNumber: this.config.get<string>('FORTUNE_PAYMENTS_BUSINESS_NUMBER', '852648'),
+      reason: ref ? `Fortune C2B API test - ${ref}` : 'Fortune C2B API test',
     });
   }
 
