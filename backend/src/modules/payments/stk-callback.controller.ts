@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Head, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, Head, HttpCode, Logger, Post } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 
 
 @Controller('stk-callback')
 export class StkCallbackController {
+  private readonly logger = new Logger(StkCallbackController.name);
+
   constructor(private readonly service: PaymentsService) {}
 
   // Some webhook validators probe reachability with a GET/HEAD before challenging.
@@ -17,6 +19,8 @@ export class StkCallbackController {
   @Post()
   @HttpCode(200)
   async callback(@Body() body: any) {
+    this.logger.log(`STK callback received: ${JSON.stringify(body)}`);
+
     if (body && typeof body.challenge === 'string') {
       return { challenge: body.challenge };
     }
