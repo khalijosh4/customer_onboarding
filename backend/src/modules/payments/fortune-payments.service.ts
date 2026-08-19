@@ -195,15 +195,17 @@ export class FortunePaymentsService {
     const token = await this.getAccessToken();
 
     // The gateway is Fortune's own C2B STK push API. Its documented contract is
-    // amount / phone_number / reason / callback_url. `account_number` is a
-    // non-standard extra field the gateway accepts to route the deposit to a
-    // specific member account (the customer's national ID while onboarding).
+    // amount / phone_number / reason / callback_url. `account_number` is the
+    // extra field the gateway uses to route the deposit to the target account
+    // (the Sacco collection/merchant account, e.g. 144706) so the payment can
+    // settle. Falls back to the params value if a caller overrides it.
     const body: Record<string, unknown> = {
       amount: params.amount,
       phone_number: this.formatMsisdn(params.phoneNumber),
       reason: params.reason,
       callback_url: this.config.get<string>('FORTUNE_PAYMENTS_CALLBACK_URL', ''),
-      account_number: 144706,
+      account_number:
+        params.accountNumber || this.config.get<string>('FORTUNE_PAYMENTS_ACCOUNT_NUMBER', ''),
     };
 
     this.logger.log(

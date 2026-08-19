@@ -33,10 +33,9 @@ export class PaymentsService {
     const sharesTotal = (application.numberOfShares || 0) * shareValue;
     const amount = Math.max(minAmount, sharesTotal);
 
-    // The gateway's C2B contract routes the deposit to the member account in
-    // `account_number` (and `reason` carries a human-readable label). Use the
-    // customer's national ID while onboarding, falling back to their member
-    // account number or the draft reference.
+    // The gateway routes the deposit to the Sacco collection/merchant account
+    // (FORTUNE_PAYMENTS_ACCOUNT_NUMBER) so it can settle; `reason` carries the
+    // human-readable customer reference (national ID while onboarding).
     const customerReference =
       application.documentIdNumber ||
       application.cbsCustomerNumber ||
@@ -46,7 +45,6 @@ export class PaymentsService {
       phoneNumber,
       amount,
       reason: `Fortune Sacco account opening - ${customerReference}`,
-      accountNumber: customerReference,
     });
 
     application.mpesaCheckoutRequestId = result.requestId;
@@ -156,7 +154,6 @@ export class PaymentsService {
     return this.fortune.stkPush({
       phoneNumber,
       amount,
-      accountNumber: "42344860",
       reason: ref ? `Fortune C2B API test - ${ref}` : 'Fortune C2B API test',
     });
   }
