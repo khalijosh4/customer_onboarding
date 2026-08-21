@@ -148,7 +148,7 @@ export default function Step3PersonalInfo({ application, onUpdated, onBack }: Pr
                 inputMode="numeric"
                 pattern="\d{7,8}"
                 maxLength={8}
-                placeholder="e.g. 42344860 (not the serial number)"
+                placeholder="e.g. 23456789 (not the serial number)"
                 value={form.documentIdNumber}
                 onChange={(e) => update('documentIdNumber', e.target.value)}
               />

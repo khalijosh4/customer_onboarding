@@ -100,7 +100,7 @@ export default function Step9Payment({ application, onUpdated, onBack }: Props) 
                       type="tel"
                       inputMode="tel"
                       className="field-input"
-                      placeholder="e.g. 254748394418 or 0748394418"
+                      placeholder=""
                       value={phoneDraft}
                       onChange={(e) => setPhoneDraft(e.target.value)}
                     />
